@@ -64,7 +64,7 @@ message FlagsInConfig {
   bool p2p_only = 32;
 
   // enable system route management for peer connections
-  bool manage_peer_routes = 33;
+  bool manage_peer_routes = 34;
 }
 
 message RpcDescriptor {
