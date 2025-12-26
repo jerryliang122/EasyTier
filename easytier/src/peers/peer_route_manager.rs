@@ -156,13 +156,6 @@ impl PeerRouteManager {
             ifconfiger: IfConfiger {},
         }
     }
-}
-
-impl Default for PeerRouteManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
     /// Add a route for a peer connection
     pub async fn add_peer_route(
@@ -281,6 +274,12 @@ impl Default for PeerRouteManager {
     /// List all managed routes
     pub async fn list_routes(&self) -> Vec<PeerRoute> {
         self.routes.lock().await.clone()
+    }
+}
+
+impl Default for PeerRouteManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
