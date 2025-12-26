@@ -57,6 +57,7 @@ pub fn gen_default_flags() -> Flags {
         encryption_algorithm: "aes-gcm".to_string(),
         disable_sym_hole_punching: false,
         tld_dns_zone: DEFAULT_ET_DNS_ZONE.to_string(),
+        manage_peer_routes: false,
     }
 }
 

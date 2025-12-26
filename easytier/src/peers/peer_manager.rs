@@ -60,6 +60,7 @@ use super::{
     peer_conn::PeerConnId,
     peer_map::PeerMap,
     peer_ospf_route::PeerRoute,
+    peer_route_manager::PeerRouteManager,
     peer_rpc::PeerRpcManager,
     route_trait::{ArcRoute, Route},
     BoxNicPacketFilter, BoxPeerPacketFilter, PacketRecvChan, PacketRecvChanReceiver,
@@ -181,11 +182,24 @@ impl PeerManager {
         let my_peer_id = rand::random();
 
         let (packet_send, packet_recv) = create_packet_recv_chan();
-        let peers = Arc::new(PeerMap::new(
-            packet_send.clone(),
-            global_ctx.clone(),
-            my_peer_id,
-        ));
+
+        // Check if route management is enabled in flags
+        let enable_route_management = global_ctx.get_flags().manage_peer_routes;
+        let peers = if enable_route_management {
+            let route_manager = Arc::new(PeerRouteManager::new());
+            Arc::new(PeerMap::new_with_route_manager(
+                packet_send.clone(),
+                global_ctx.clone(),
+                my_peer_id,
+                route_manager,
+            ))
+        } else {
+            Arc::new(PeerMap::new(
+                packet_send.clone(),
+                global_ctx.clone(),
+                my_peer_id,
+            ))
+        };
 
         let encryptor = if global_ctx.get_flags().enable_encryption {
             // 只有在启用加密时才使用工厂函数选择算法

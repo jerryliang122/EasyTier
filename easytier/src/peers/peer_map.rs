@@ -24,6 +24,7 @@ use crate::{
 use super::{
     peer::Peer,
     peer_conn::{PeerConn, PeerConnId},
+    peer_route_manager::PeerRouteManager,
     route_trait::{ArcRoute, NextHopPolicy},
     PacketRecvChan,
 };
@@ -35,10 +36,15 @@ pub struct PeerMap {
     packet_send: PacketRecvChan,
     routes: RwLock<Vec<ArcRoute>>,
     alive_client_urls: Arc<Mutex<multimap::MultiMap<url::Url, PeerConnId>>>,
+    route_manager: Option<Arc<PeerRouteManager>>,
 }
 
 impl PeerMap {
-    pub fn new(packet_send: PacketRecvChan, global_ctx: ArcGlobalCtx, my_peer_id: PeerId) -> Self {
+    pub fn new(
+        packet_send: PacketRecvChan,
+        global_ctx: ArcGlobalCtx,
+        my_peer_id: PeerId,
+    ) -> Self {
         PeerMap {
             global_ctx,
             my_peer_id,
@@ -46,6 +52,24 @@ impl PeerMap {
             packet_send,
             routes: RwLock::new(Vec::new()),
             alive_client_urls: Arc::new(Mutex::new(multimap::MultiMap::new())),
+            route_manager: None,
+        }
+    }
+
+    pub fn new_with_route_manager(
+        packet_send: PacketRecvChan,
+        global_ctx: ArcGlobalCtx,
+        my_peer_id: PeerId,
+        route_manager: Arc<PeerRouteManager>,
+    ) -> Self {
+        PeerMap {
+            global_ctx,
+            my_peer_id,
+            peer_map: DashMap::new(),
+            packet_send,
+            routes: RwLock::new(Vec::new()),
+            alive_client_urls: Arc::new(Mutex::new(multimap::MultiMap::new())),
+            route_manager: Some(route_manager),
         }
     }
 
@@ -60,6 +84,20 @@ impl PeerMap {
         let _ = self.maintain_alive_client_urls(&peer_conn);
         let peer_id = peer_conn.get_peer_id();
         let no_entry = self.peer_map.get(&peer_id).is_none();
+
+        // Add system route for peer connection if route manager is enabled
+        if let (Some(route_manager), Some(tunnel_info)) =
+            (&self.route_manager, peer_conn.tunnel_info.clone())
+        {
+            if let Err(e) = route_manager.add_peer_route(peer_id, &tunnel_info).await {
+                tracing::warn!(
+                    "Failed to add system route for peer {}: {:?}",
+                    peer_id,
+                    e
+                );
+            }
+        }
+
         if no_entry {
             let new_peer = Peer::new(peer_id, self.packet_send.clone(), self.global_ctx.clone());
             new_peer.add_peer_conn(peer_conn).await;
@@ -315,6 +353,17 @@ impl PeerMap {
     }
 
     pub async fn close_peer(&self, peer_id: PeerId) -> Result<(), TunnelError> {
+        // Remove system routes for this peer if route manager is enabled
+        if let Some(route_manager) = &self.route_manager {
+            if let Err(e) = route_manager.remove_peer_routes(peer_id).await {
+                tracing::warn!(
+                    "Failed to remove system route for peer {}: {:?}",
+                    peer_id,
+                    e
+                );
+            }
+        }
+
         let remove_ret = self.peer_map.remove(&peer_id);
         shrink_dashmap(&self.peer_map, None);
 
