@@ -44,6 +44,7 @@ RUN apt-get update && apt-get install -y \
     # 其他工具
     protobuf-compiler \
     protobuf-compiler-grpc \
+    openssh-server \
     # 清理
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -110,38 +111,12 @@ EXPOSE 11010/tcp 11010/udp 11011/udp 11011/tcp 11012/tcp
 RUN echo 'source $HOME/.cargo/env' >> /root/.bashrc \
     && echo 'export PS1="\[\e[36m\]EasyTier-Dev\[\e[0m\] \[\e[33m\]\w\[\e[0m\]\\$ "' >> /root/.bashrc
 
-# 创建启动脚本
-RUN cat > /root/entrypoint.sh << 'EOF'
-#!/bin/bash
-echo "🚀 EasyTier 开发环境已准备就绪！"
-echo ""
-echo "📋 可用命令："
-echo "  - cargo build --release     # 编译 Rust 项目"
-echo "  - pnpm install              # 安装前端依赖"
-echo "  - pnpm dev                  # 启动前端开发服务器"
-echo "  - pnpm tauri dev            # 启动 Tauri GUI 开发"
-echo "  - easytier-core --help      # 查看 EasyTier 核心帮助"
-echo ""
-echo "🔧 环境配置："
-echo "  - Rust: $(rustc --version)"
-echo "  - Node.js: $(node --version)"
-echo "  - pnpm: $(pnpm --version)"
-echo "  - Java: $(java --version 2>&1 | head -n 1)"
-echo ""
-echo "📱 Android 开发："
-echo "  - SDK_ROOT: $ANDROID_SDK_ROOT"
-echo "  - NDK_ROOT: $NDK_HOME"
-echo ""
-echo "💡 提示：使用 'cd /workspace/src' 进入项目目录"
-echo ""
-
-exec "$@"
-EOF
-
-RUN chmod +x /root/entrypoint.sh
-
-# 设置入口点
-ENTRYPOINT ["/root/entrypoint.sh", "bash"]
-
-# 默认命令
-CMD ["/bin/bash"]
+RUN curl -fsSL https://code-server.dev/install.sh | sh \
+  && code-server --install-extension cnbcool.cnb-welcome \
+  && code-server --install-extension redhat.vscode-yaml \
+  && code-server --install-extension dbaeumer.vscode-eslint \
+  && code-server --install-extension waderyan.gitblame \
+  && code-server --install-extension mhutchie.git-graph \
+  && code-server --install-extension donjayamanne.githistory \
+  && code-server --install-extension tencent-cloud.coding-copilot \
+  && echo done
