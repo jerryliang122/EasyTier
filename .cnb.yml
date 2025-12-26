@@ -29,7 +29,7 @@ $:
 
         - name: setup system for test
           script: |
-            apt-get install -y procps
+            apt-get install -y procps module-init-tools
             modprobe br_netfilter
             sysctl net.bridge.bridge-nf-call-iptables=0
             sysctl net.bridge.bridge-nf-call-ip6tables=0
