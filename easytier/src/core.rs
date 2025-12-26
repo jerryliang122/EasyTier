@@ -382,6 +382,15 @@ struct NetworkOptions {
     )]
     manual_routes: Option<Vec<String>>,
 
+    #[arg(
+        long,
+        env = "ET_MANAGE_PEER_ROUTES",
+        help = t!("core_clap.manage_peer_routes").to_string(),
+        num_args = 0..=1,
+        default_missing_value = "true"
+    )]
+    manage_peer_routes: Option<bool>,
+
     // if not in relay_network_whitelist:
     // for foreign virtual network, will refuse the incoming connection
     // for local virtual network, will refuse to relay tun packets
@@ -960,6 +969,7 @@ impl NetworkOptions {
             .enable_relay_foreign_network_kcp
             .unwrap_or(f.enable_relay_foreign_network_kcp);
         f.disable_sym_hole_punching = self.disable_sym_hole_punching.unwrap_or(false);
+        f.manage_peer_routes = self.manage_peer_routes.unwrap_or(f.manage_peer_routes);
         // Configure tld_dns_zone: use provided value if set
         if let Some(tld_dns_zone) = &self.tld_dns_zone {
             f.tld_dns_zone = tld_dns_zone.clone();

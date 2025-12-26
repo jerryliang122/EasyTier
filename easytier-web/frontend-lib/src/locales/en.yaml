@@ -155,6 +155,11 @@ manual_routes: Manual Route
 manual_routes_help: |
   Assign routes cidr manually, will disable subnet proxy and wireguard routes propagated from peers. e.g.:192.168.0.0/16
 
+manage_peer_routes: Manage Peer Routes
+manage_peer_routes_help: |
+  Automatically add system routes for each peer connection to ensure traffic is correctly routed to the peer's public IP address.
+  When a peer connects, a /32 host route is added to the peer's public IP; when the peer disconnects, the corresponding route is removed.
+
 socks5: Socks5 Server
 socks5_help: |
   Enable socks5 server, allow socks5 client to access virtual network. format: <port>, e.g.: 1080
