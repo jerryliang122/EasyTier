@@ -215,7 +215,7 @@ impl PeerRouteManager {
         let route = PeerRoute {
             peer_id,
             destination: remote_ip,
-            interface: interface_name,
+            interface: interface_name.clone(),
             prefix,
         };
 
