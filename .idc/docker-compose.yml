@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  easytier-dev:
+    build:
+      context: ..
+      dockerfile: .idc/dockerfile
+    container_name: easytier-dev-workspace
+    hostname: easytier-dev
+    stdin_open: true
+    tty: true
+    ports:
+      - "11010:11010/tcp"
+      - "11010:11010/udp"
+      - "11011:11011/udp"
+      - "11011:11011/tcp"
+      - "11012:11012/tcp"
+    volumes:
+      # 项目源码
+      - ..:/workspace
+      # Cargo 缓存（加速构建）
+      - cargo-cache:/root/.cargo/registry
+      - cargo-cache:/root/.cargo/git
+      # Node.js 缓存
+      - pnpm-cache:/root/.pnpm-store
+      # Rust target 缓存
+      - target-cache:/workspace/target
+      # Android SDK 缓存（可选）
+      - android-cache:/opt/android
+    environment:
+      - TZ=Asia/Shanghai
+      - RUST_LOG=info
+      - CARGO_TERM_COLOR=always
+    working_dir: /workspace
+    network_mode: host  # 需要网络权限进行 VPN 开发
+    cap_add:
+      - NET_ADMIN  # 网络管理权限（TUN/TAP）
+      - SYS_ADMIN  # 系统管理权限
+    privileged: true  # 必要的特权（用于网络操作）
+    security_opt:
+      - seccomp:unconfined  # 允许更多系统调用
+    command: /bin/bash
+
+volumes:
+  cargo-cache:
+    driver: local
+  pnpm-cache:
+    driver: local
+  target-cache:
+    driver: local
+  android-cache:
+    driver: local
