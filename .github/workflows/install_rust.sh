@@ -8,7 +8,7 @@
 # dependencies are only needed on ubuntu as that's the only place where
 # we make cross-compilation
 if [[ $OS =~ ^ubuntu.*$ ]]; then
-    sudo apt-get update && sudo apt-get install -qq musl-tools libappindicator3-dev llvm clang
+    sudo apt-get update && sudo apt-get install -y musl-tools libappindicator3-dev llvm clang
     # https://github.com/cross-tools/musl-cross/releases
     # if "musl" is a substring of TARGET, we assume that we are using musl
     MUSL_TARGET=$TARGET
