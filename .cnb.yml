@@ -25,7 +25,7 @@ $:
 
         - name: setup tools for test
           script: |
-            apt-get install -y bridge-utils sudo
+            apt-get install -y bridge-utils sudo libclang-dev
 
         - name: install node and pnpm
           script: |
