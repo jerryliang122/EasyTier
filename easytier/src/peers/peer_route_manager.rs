@@ -1,11 +1,13 @@
 use std::net::{IpAddr, Ipv4Addr};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::Context;
+use tokio::sync::Mutex;
 
 use crate::{
     common::{
-        ifcfg::{IfConfiger, IfConfiguerTrait, PeerId},
+        ifcfg::{IfConfiger, IfConfiguerTrait},
+        PeerId,
         error::Error,
     },
     proto::common::TunnelInfo,
@@ -151,7 +153,7 @@ impl PeerRouteManager {
     pub fn new() -> Self {
         Self {
             routes: Arc::new(Mutex::new(Vec::new())),
-            ifconfiger: IfConfiger,
+            ifconfiger: IfConfiger {},
         }
     }
 
