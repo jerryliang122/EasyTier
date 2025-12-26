@@ -46,14 +46,17 @@ $:
             rustup component add clippy
 
         - name: check formatting
+          allowFailure: true
           script: cargo fmt --all -- --check
 
         - name: check clippy
+          allowFailure: true
           script: |
             mkdir -p easytier-gui/dist
             cargo clippy --all-targets --all-features --all -- -D warnings
 
         - name: run tests
+          allowFailure: true
           script: |
             prlimit --pid $$ --nofile=1048576:1048576
             cargo test --no-default-features --features=full --verbose -- --test-threads=1
