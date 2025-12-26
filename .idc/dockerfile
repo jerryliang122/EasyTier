@@ -1,7 +1,7 @@
 FROM rust:1.89
 
 # 安装 GUI 依赖
-RUN apt install -y libwebkit2gtk-4.1-dev \
+RUN apt update && apt install -y libwebkit2gtk-4.1-dev \
     build-essential \
     curl \
     wget \
