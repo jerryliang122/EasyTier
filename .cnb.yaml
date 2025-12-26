@@ -5,7 +5,119 @@ $:
       services:
         - vscode
         - docker
-      # 开发环境启动后会执行的任务
       stages:
         - name: ls
           script: ls -al
+# 代码扫描流水线配置
+# 在 develop 和 main 分支 push 时触发
+develop:
+  push:
+    - docker:
+        image: rust:1.89
+        volumes:
+          - /root/.cargo:copy-on-write
+          - ./target:copy-on-write
+      stages:
+        - name: setup protoc
+          script: |
+            apt-get update
+            apt-get install -y protobuf-compiler
+
+        - name: setup tools for test
+          script: |
+            apt-get install -y bridge-utils
+
+        - name: setup system for test
+          script: |
+            modprobe br_netfilter
+            sysctl net.bridge.bridge-nf-call-iptables=0
+            sysctl net.bridge.bridge-nf-call-ip6tables=0
+            sysctl net.ipv6.conf.lo.disable_ipv6=0
+            ip addr add 2001:db8::2/64 dev lo
+
+        - name: install node and pnpm
+          script: |
+            apt-get install -y curl
+            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+            apt-get install -y nodejs
+            npm install -g pnpm@10
+
+        - name: install frontend dependencies
+          script: |
+            pnpm -r install
+            pnpm -r --filter "./easytier-web/*" build
+
+        - name: install gui dependencies
+          script: |
+            bash ./.github/workflows/install_gui_dep.sh
+            rustup component add rustfmt
+            rustup component add clippy
+
+        - name: check formatting
+          script: cargo fmt --all -- --check
+
+        - name: check clippy
+          script: |
+            mkdir -p easytier-gui/dist
+            cargo clippy --all-targets --all-features --all -- -D warnings
+
+        - name: run tests
+          script: |
+            prlimit --pid $$ --nofile=1048576:1048576
+            cargo test --no-default-features --features=full --verbose -- --test-threads=1
+
+main:
+  push:
+    - docker:
+        image: rust:1.89
+        volumes:
+          - /root/.cargo:copy-on-write
+          - ./target:copy-on-write
+      stages:
+        - name: setup protoc
+          script: |
+            apt-get update
+            apt-get install -y protobuf-compiler
+
+        - name: setup tools for test
+          script: |
+            apt-get install -y bridge-utils
+
+        - name: setup system for test
+          script: |
+            modprobe br_netfilter
+            sysctl net.bridge.bridge-nf-call-iptables=0
+            sysctl net.bridge.bridge-nf-call-ip6tables=0
+            sysctl net.ipv6.conf.lo.disable_ipv6=0
+            ip addr add 2001:db8::2/64 dev lo
+
+        - name: install node and pnpm
+          script: |
+            apt-get install -y curl
+            curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+            apt-get install -y nodejs
+            npm install -g pnpm@10
+
+        - name: install frontend dependencies
+          script: |
+            pnpm -r install
+            pnpm -r --filter "./easytier-web/*" build
+
+        - name: install gui dependencies
+          script: |
+            bash ./.github/workflows/install_gui_dep.sh
+            rustup component add rustfmt
+            rustup component add clippy
+
+        - name: check formatting
+          script: cargo fmt --all -- --check
+
+        - name: check clippy
+          script: |
+            mkdir -p easytier-gui/dist
+            cargo clippy --all-targets --all-features --all -- -D warnings
+
+        - name: run tests
+          script: |
+            prlimit --pid $$ --nofile=1048576:1048576
+            cargo test --no-default-features --features=full --verbose -- --test-threads=1
