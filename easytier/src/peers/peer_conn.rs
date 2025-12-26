@@ -534,6 +534,10 @@ impl PeerConn {
     pub fn get_my_peer_id(&self) -> PeerId {
         self.my_peer_id
     }
+
+    pub fn get_tunnel_info(&self) -> Option<TunnelInfo> {
+        self.tunnel_info.clone()
+    }
 }
 
 impl Drop for PeerConn {

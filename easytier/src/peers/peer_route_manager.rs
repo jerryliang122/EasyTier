@@ -1,19 +1,17 @@
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr};
+use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
-use async_trait::async_trait;
-use tokio::sync::{Arc, Mutex};
 
 use crate::{
     common::{
-        ifcfg::{IfConfiger, IfConfigerTrait},
+        ifcfg::{IfConfiger, IfConfiguerTrait, PeerId},
         error::Error,
     },
     proto::common::TunnelInfo,
-    PeerId,
 };
 
-/// Get the default gateway for the system
+/// Get default gateway for system
 #[cfg(target_os = "linux")]
 async fn get_default_gateway() -> Result<Option<IpAddr>, Error> {
     use std::fs;
@@ -42,7 +40,7 @@ async fn get_default_gateway() -> Result<Option<IpAddr>, Error> {
     Ok(None)
 }
 
-/// Get the default gateway for the system
+/// Get default gateway for system
 #[cfg(target_os = "windows")]
 async fn get_default_gateway() -> Result<Option<IpAddr>, Error> {
     use tokio::process::Command;
@@ -69,7 +67,7 @@ async fn get_default_gateway() -> Result<Option<IpAddr>, Error> {
     Ok(None)
 }
 
-/// Get the default gateway for the system
+/// Get default gateway for system
 #[cfg(any(target_os = "macos", target_os = "freebsd"))]
 async fn get_default_gateway() -> Result<Option<IpAddr>, Error> {
     use tokio::process::Command;
@@ -97,11 +95,9 @@ async fn get_default_gateway() -> Result<Option<IpAddr>, Error> {
     Ok(None)
 }
 
-/// Get the interface name for a given IP address
+/// Get interface name for a given IP address
 async fn get_interface_for_ip(target_ip: IpAddr) -> Result<Option<String>, Error> {
-    use pnet::datalink::{self, NetworkInterface};
-
-    let interfaces = datalink::interfaces();
+    let interfaces = pnet::datalink::interfaces();
 
     for iface in interfaces {
         for ip_network in &iface.ips {
@@ -114,7 +110,7 @@ async fn get_interface_for_ip(target_ip: IpAddr) -> Result<Option<String>, Error
     Ok(None)
 }
 
-/// Get the interface name for a given destination IP
+/// Get interface name for a given destination IP
 async fn get_interface_for_destination(destination: IpAddr) -> Result<Option<String>, Error> {
     use tokio::net::UdpSocket;
 
@@ -213,7 +209,7 @@ impl PeerRouteManager {
             }
         }
 
-        // Store the route information
+        // Store route information
         let route = PeerRoute {
             peer_id,
             destination: remote_ip,

@@ -87,7 +87,7 @@ impl PeerMap {
 
         // Add system route for peer connection if route manager is enabled
         if let (Some(route_manager), Some(tunnel_info)) =
-            (&self.route_manager, peer_conn.tunnel_info.clone())
+            (&self.route_manager, peer_conn.get_tunnel_info())
         {
             if let Err(e) = route_manager.add_peer_route(peer_id, &tunnel_info).await {
                 tracing::warn!(
