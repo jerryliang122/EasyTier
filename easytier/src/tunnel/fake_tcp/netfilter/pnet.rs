@@ -223,11 +223,36 @@ fn get_or_create_worker(interface_name: &str) -> Arc<InterfaceWorker> {
 
     // But creation is rare.
     // Let's find interface first.
-    let interfaces = datalink::interfaces();
-    let interface = interfaces
-        .into_iter()
-        .find(|iface| iface.name == interface_name)
-        .expect("Network interface not found");
+    #[cfg(not(target_os = "windows"))]
+    let interface = {
+        let interfaces = datalink::interfaces();
+        interfaces
+            .into_iter()
+            .find(|iface| iface.name == interface_name)
+            .expect("Network interface not found")
+    };
+
+    #[cfg(target_os = "windows")]
+    let interface = {
+        use network_interface::NetworkInterfaceConfig;
+        let interfaces = network_interface::NetworkInterface::show()
+            .unwrap_or_default();
+        let network_interface = interfaces
+            .into_iter()
+            .find(|iface| iface.name == interface_name)
+            .expect("Network interface not found");
+
+        // Convert network_interface::NetworkInterface to pnet::datalink::NetworkInterface
+        // For Windows, we only need the name, other fields are not used in this context
+        pnet::datalink::NetworkInterface {
+            name: network_interface.name.clone(),
+            description: network_interface.description,
+            index: network_interface.index as u32,
+            mac: network_interface.mac.map(|m| pnet::util::MacAddr::new(m.0[0], m.0[1], m.0[2], m.0[3], m.0[4], m.0[5])),
+            ips: vec![], // Not used in InterfaceWorker creation
+            flags: 0,
+        }
+    };
 
     let worker = InterfaceWorker::new(interface);
     INTERFACE_MANAGERS.insert(interface_name.to_string(), Arc::downgrade(&worker));

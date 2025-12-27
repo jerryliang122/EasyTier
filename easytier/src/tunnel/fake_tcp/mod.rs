@@ -22,6 +22,9 @@ use futures::Future;
 use dashmap::DashMap;
 
 struct IpToIfNameCache {
+    #[cfg(not(target_os = "windows"))]
+    ip_to_ifname: DashMap<IpAddr, (String, Option<MacAddr>)>,
+    #[cfg(target_os = "windows")]
     ip_to_ifname: DashMap<IpAddr, (String, Option<MacAddr>)>,
 }
 
@@ -32,6 +35,7 @@ impl IpToIfNameCache {
         }
     }
 
+    #[cfg(not(target_os = "windows"))]
     fn reload_ip_to_ifname(&self) {
         self.ip_to_ifname.clear();
         let interfaces = datalink::interfaces();
@@ -43,7 +47,33 @@ impl IpToIfNameCache {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    fn reload_ip_to_ifname(&self) {
+        self.ip_to_ifname.clear();
+        use network_interface::NetworkInterfaceConfig;
+        let interfaces = network_interface::NetworkInterface::show()
+            .unwrap_or_default();
+        for iface in interfaces {
+            for addr in iface.addr {
+                let mac_addr = iface.mac.map(|m| pnet::util::MacAddr::new(m.0[0], m.0[1], m.0[2], m.0[3], m.0[4], m.0[5]));
+                self.ip_to_ifname
+                    .insert(addr.ip(), (iface.name.clone(), mac_addr));
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "windows"))]
     fn get_ifname(&self, ip: &IpAddr) -> Option<(String, Option<MacAddr>)> {
+        if let Some(ifname) = self.ip_to_ifname.get(ip) {
+            Some(ifname.clone())
+        } else {
+            self.reload_ip_to_ifname();
+            self.ip_to_ifname.get(ip).map(|s| s.clone())
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    fn get_ifname(&self, ip: &IpAddr) -> Option<(String, Option<pnet::util::MacAddr>)> {
         if let Some(ifname) = self.ip_to_ifname.get(ip) {
             Some(ifname.clone())
         } else {

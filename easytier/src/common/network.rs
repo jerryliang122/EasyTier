@@ -1,5 +1,6 @@
 use std::{net::IpAddr, ops::Deref, sync::Arc};
 
+#[cfg(not(target_os = "windows"))]
 use pnet::datalink::NetworkInterface;
 use tokio::{
     sync::{Mutex, RwLock},
@@ -12,8 +13,14 @@ use super::{netns::NetNS, stun::StunInfoCollectorTrait};
 
 pub const CACHED_IP_LIST_TIMEOUT_SEC: u64 = 60;
 
+#[cfg(not(target_os = "windows"))]
 struct InterfaceFilter {
     iface: NetworkInterface,
+}
+
+#[cfg(target_os = "windows")]
+struct InterfaceFilter {
+    iface: network_interface::NetworkInterface,
 }
 
 #[cfg(any(target_os = "android", target_env = "ohos"))]
@@ -254,6 +261,7 @@ impl IPCollector {
         self.cached_ip_list.read().await.deref().clone()
     }
 
+    #[cfg(not(target_os = "windows"))]
     pub async fn collect_interfaces(net_ns: NetNS, filter: bool) -> Vec<NetworkInterface> {
         let _g = net_ns.guard();
         let ifaces = pnet::datalink::interfaces();
@@ -273,7 +281,32 @@ impl IPCollector {
         ret
     }
 
+    #[cfg(target_os = "windows")]
+    pub async fn collect_interfaces(net_ns: NetNS, filter: bool) -> Vec<network_interface::NetworkInterface> {
+        let _g = net_ns.guard();
+        let ifaces = network_interface::NetworkInterface::show()
+            .map_err(|e| {
+                tracing::error!("Failed to get interfaces: {}", e);
+            })
+            .unwrap_or_default();
+        let mut ret = vec![];
+        for iface in ifaces {
+            let f = InterfaceFilter {
+                iface: iface.clone(),
+            };
+
+            if filter && !f.filter_iface().await {
+                continue;
+            }
+
+            ret.push(iface);
+        }
+
+        ret
+    }
+
     #[tracing::instrument(skip(net_ns))]
+    #[cfg(not(target_os = "windows"))]
     async fn do_collect_local_ip_addrs(net_ns: NetNS) -> GetIpListResponse {
         let mut ret = GetIpListResponse::default();
 
@@ -295,6 +328,56 @@ impl IPCollector {
         let _g = net_ns.guard();
         for iface in ifaces {
             for ip in iface.ips {
+                let ip: std::net::IpAddr = ip.ip();
+                if let std::net::IpAddr::V6(v6) = ip {
+                    if v6.is_multicast() || v6.is_loopback() || v6.is_unicast_link_local() {
+                        continue;
+                    }
+                    ret.interface_ipv6s.push(v6.into());
+                }
+            }
+        }
+
+        if let Ok(v4_addr) = local_ipv4().await {
+            tracing::trace!("got local ipv4: {}", v4_addr);
+            if !ret.interface_ipv4s.contains(&v4_addr.into()) {
+                ret.interface_ipv4s.push(v4_addr.into());
+            }
+        }
+
+        if let Ok(v6_addr) = local_ipv6().await {
+            tracing::trace!("got local ipv6: {}", v6_addr);
+            if !ret.interface_ipv6s.contains(&v6_addr.into()) {
+                ret.interface_ipv6s.push(v6_addr.into());
+            }
+        }
+
+        ret
+    }
+
+    #[tracing::instrument(skip(net_ns))]
+    #[cfg(target_os = "windows")]
+    async fn do_collect_local_ip_addrs(net_ns: NetNS) -> GetIpListResponse {
+        let mut ret = GetIpListResponse::default();
+
+        let ifaces = Self::collect_interfaces(net_ns.clone(), true).await;
+        let _g = net_ns.guard();
+        for iface in ifaces {
+            for ip in iface.addr {
+                let ip: std::net::IpAddr = ip.ip();
+                if let std::net::IpAddr::V4(v4) = ip {
+                    if ip.is_loopback() || ip.is_multicast() {
+                        continue;
+                    }
+                    ret.interface_ipv4s.push(v4.into());
+                }
+            }
+        }
+
+        let ifaces = Self::collect_interfaces(net_ns.clone(), false).await;
+        let _g = net_ns.guard();
+        for iface in ifaces {
+            for ip in iface.addr {
                 let ip: std::net::IpAddr = ip.ip();
                 if let std::net::IpAddr::V6(v6) = ip {
                     if v6.is_multicast() || v6.is_loopback() || v6.is_unicast_link_local() {
