@@ -98,6 +98,32 @@ async fn get_default_gateway() -> Result<Option<IpAddr>, Error> {
 }
 
 /// Get interface name for a given IP address
+#[cfg(target_os = "windows")]
+async fn get_interface_for_ip(target_ip: IpAddr) -> Result<Option<String>, Error> {
+    use network_interface::NetworkInterfaceConfig;
+
+    let interfaces = network_interface::NetworkInterface::show()
+        .map_err(|e| Error::ShellCommandError(format!("Failed to get interfaces: {}", e)))?;
+
+    for iface in interfaces {
+        for addr in &iface.addr {
+            if target_ip.is_ipv4() && addr.ip().is_ipv4() {
+                if addr.ip() == target_ip {
+                    return Ok(Some(iface.name));
+                }
+            } else if target_ip.is_ipv6() && addr.ip().is_ipv6() {
+                if addr.ip() == target_ip {
+                    return Ok(Some(iface.name));
+                }
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+/// Get interface name for a given IP address
+#[cfg(not(target_os = "windows"))]
 async fn get_interface_for_ip(target_ip: IpAddr) -> Result<Option<String>, Error> {
     let interfaces = pnet::datalink::interfaces();
 
