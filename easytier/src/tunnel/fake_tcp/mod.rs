@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::{net::SocketAddr, pin::Pin};
 
 use bytes::BytesMut;
+#[cfg(not(target_os = "windows"))]
 use pnet::datalink;
 use pnet::util::MacAddr;
 use tokio::io::AsyncReadExt;
@@ -55,7 +56,7 @@ impl IpToIfNameCache {
             .unwrap_or_default();
         for iface in interfaces {
             for addr in iface.addr {
-                let mac_addr = iface.mac.map(|m| pnet::util::MacAddr::new(m.0[0], m.0[1], m.0[2], m.0[3], m.0[4], m.0[5]));
+                let mac_addr = iface.mac_addr.map(|m| pnet::util::MacAddr::new(m.0[0], m.0[1], m.0[2], m.0[3], m.0[4], m.0[5]));
                 self.ip_to_ifname
                     .insert(addr.ip(), (iface.name.clone(), mac_addr));
             }

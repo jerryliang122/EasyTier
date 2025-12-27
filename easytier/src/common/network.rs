@@ -2,6 +2,8 @@ use std::{net::IpAddr, ops::Deref, sync::Arc};
 
 #[cfg(not(target_os = "windows"))]
 use pnet::datalink::NetworkInterface;
+#[cfg(target_os = "windows")]
+use network_interface::NetworkInterfaceConfig;
 use tokio::{
     sync::{Mutex, RwLock},
     task::JoinSet,
@@ -147,19 +149,29 @@ impl InterfaceFilter {
         tracing::debug!(
             "iface_name: {:?}, p2p: {:?}, is_up: {:?}, iface: {:?}",
             self.iface.name,
-            self.iface.is_point_to_point(),
-            self.iface.is_up(),
-            self.iface
-        );
-        !self.iface.is_point_to_point()
-            && !self.iface.is_loopback()
-            && self
+            false, // network_interface doesn't have is_point_to_point
+            true,  // network_interface doesn't have is_up, assume true
+            self
                 .iface
-                .ips
+        );
+        // network_interface doesn't have is_point_to_point, is_loopback, or is_up methods
+        // Skip loopback addresses
+        !self
+                .iface
+                .addr
                 .iter()
-                .map(|ip| ip.ip())
-                .any(|ip| !ip.is_loopback() && !ip.is_unspecified() && !ip.is_multicast())
-            && self.iface.mac.map(|mac| !mac.is_zero()).unwrap_or(false)
+                .all(|addr| addr.ip().is_loopback())
+            && !self
+                .iface
+                .addr
+                .iter()
+                .all(|addr| addr.ip().is_unspecified())
+            && !self
+                .iface
+                .addr
+                .iter()
+                .all(|addr| addr.ip().is_multicast())
+            && self.iface.mac_addr.map(|mac| !mac.is_zero()).unwrap_or(false)
     }
 }
 
@@ -363,8 +375,8 @@ impl IPCollector {
         let ifaces = Self::collect_interfaces(net_ns.clone(), true).await;
         let _g = net_ns.guard();
         for iface in ifaces {
-            for ip in iface.addr {
-                let ip: std::net::IpAddr = ip.ip();
+            for addr in &iface.addr {
+                let ip: std::net::IpAddr = addr.ip();
                 if let std::net::IpAddr::V4(v4) = ip {
                     if ip.is_loopback() || ip.is_multicast() {
                         continue;
@@ -377,8 +389,8 @@ impl IPCollector {
         let ifaces = Self::collect_interfaces(net_ns.clone(), false).await;
         let _g = net_ns.guard();
         for iface in ifaces {
-            for ip in iface.addr {
-                let ip: std::net::IpAddr = ip.ip();
+            for addr in &iface.addr {
+                let ip: std::net::IpAddr = addr.ip();
                 if let std::net::IpAddr::V6(v6) = ip {
                     if v6.is_multicast() || v6.is_loopback() || v6.is_unicast_link_local() {
                         continue;

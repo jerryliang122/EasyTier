@@ -246,9 +246,9 @@ fn get_or_create_worker(interface_name: &str) -> Arc<InterfaceWorker> {
         // For Windows, we only need the name, other fields are not used in this context
         pnet::datalink::NetworkInterface {
             name: network_interface.name.clone(),
-            description: network_interface.description,
+            description: None, // network_interface doesn't have description field
             index: network_interface.index as u32,
-            mac: network_interface.mac.map(|m| pnet::util::MacAddr::new(m.0[0], m.0[1], m.0[2], m.0[3], m.0[4], m.0[5])),
+            mac: network_interface.mac_addr.map(|m| pnet::util::MacAddr::new(m.0[0], m.0[1], m.0[2], m.0[3], m.0[4], m.0[5])),
             ips: vec![], // Not used in InterfaceWorker creation
             flags: 0,
         }
