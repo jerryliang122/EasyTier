@@ -680,9 +680,18 @@ impl Instance {
 
     async fn use_new_nic_ctx(
         arc_nic_ctx: ArcNicCtx,
-        nic_ctx: NicCtx,
+        mut nic_ctx: NicCtx,
         magic_dns: Option<DnsRunner>,
+        peer_manager: Option<Arc<PeerManager>>,
     ) {
+        // Set exit node manager to peer manager if available
+        if let Some(exit_manager) = nic_ctx.get_exit_node_manager() {
+            if let Some(ref pm) = peer_manager {
+                pm.set_exit_node_manager(Some(exit_manager)).await;
+                tracing::debug!("Exit node manager set to peer manager");
+            }
+        }
+        
         let mut g = arc_nic_ctx.lock().await;
         *g = Some(NicCtxContainer::new(nic_ctx, magic_dns));
         tracing::debug!("nic ctx updated.");
@@ -791,6 +800,7 @@ impl Instance {
                             nic_ctx.clone(),
                             new_nic_ctx,
                             Self::create_magic_dns_runner(peer_manager_c.clone(), ifname, ip),
+                            Some(peer_manager_c.clone()),
                         )
                         .await;
                     }
@@ -858,7 +868,7 @@ impl Instance {
                 } else {
                     None
                 };
-                Self::use_new_nic_ctx(nic_ctx.clone(), new_nic_ctx, dns_runner).await;
+                Self::use_new_nic_ctx(nic_ctx.clone(), new_nic_ctx, dns_runner, Some(peer_mgr.clone())).await;
 
                 if let Some(output_tx) = output_tx.take() {
                     let _ = output_tx.send(Ok(()));
@@ -1422,7 +1432,7 @@ impl Instance {
         } else {
             None
         };
-        Self::use_new_nic_ctx(nic_ctx.clone(), new_nic_ctx, magic_dns_runner).await;
+        Self::use_new_nic_ctx(nic_ctx.clone(), new_nic_ctx, magic_dns_runner, Some(self.peer_manager.clone())).await;
         Ok(())
     }
 

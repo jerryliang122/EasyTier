@@ -55,6 +55,7 @@ use crate::{
 use super::{
     create_packet_recv_chan,
     encrypt::{Encryptor, NullCipher},
+    exit_node_manager::ExitNodeManager,
     foreign_network_client::ForeignNetworkClient,
     foreign_network_manager::{ForeignNetworkManager, GlobalForeignNetworkAccessor},
     peer_conn::PeerConnId,
@@ -154,6 +155,7 @@ pub struct PeerManager {
     data_compress_algo: CompressorAlgo,
 
     exit_nodes: RwLock<Vec<IpAddr>>,
+    exit_node_manager: RwLock<Option<Arc<ExitNodeManager>>>,
 
     reserved_my_peer_id_map: DashMap<String, PeerId>,
 
@@ -306,6 +308,7 @@ impl PeerManager {
             data_compress_algo,
 
             exit_nodes: RwLock::new(exit_nodes),
+            exit_node_manager: RwLock::new(None),
 
             reserved_my_peer_id_map: DashMap::new(),
 
@@ -1096,14 +1099,49 @@ impl PeerManager {
             .global_ctx
             .is_ip_in_same_network(&std::net::IpAddr::V4(*ipv4_addr))
         {
-            for exit_node in self.exit_nodes.read().await.iter() {
-                let IpAddr::V4(exit_node) = exit_node else {
-                    continue;
-                };
-                if let Some(peer_id) = self.peers.get_peer_id_by_ipv4(exit_node).await {
-                    dst_peers.push(peer_id);
-                    is_exit_node = true;
-                    break;
+            // Use enhanced exit node routing with ExitNodeManager
+            if let Some(exit_manager) = self.exit_node_manager.read().await.as_ref() {
+                // Check if the target IP is an exit node virtual IP
+                let ip_addr = std::net::IpAddr::V4(*ipv4_addr);
+                if exit_manager.is_exit_node_ip(&ip_addr).await {
+                    // Use real IP for exit node to prevent loops
+                    if let Some(real_ip) = exit_manager.get_real_ip(&ip_addr).await {
+                        tracing::debug!(
+                            target_ip = %ip_addr,
+                            real_ip = %real_ip,
+                            "Using exit node real IP for routing"
+                        );
+                        // For now, we still route through the virtual IP peer
+                        // The routing will be handled by the exit node manager's route tables
+                    }
+                }
+                
+                // Get the best exit node for this traffic
+                if let Some(best_exit_node) = exit_manager.get_best_exit_node().await {
+                    if let Some(peer_id) = self.peers.get_peer_id_by_ipv4(&best_exit_node.virtual_ip).await {
+                        dst_peers.push(peer_id);
+                        is_exit_node = true;
+                        
+                        tracing::debug!(
+                            target_ip = %ipv4_addr,
+                            exit_node_virtual_ip = %best_exit_node.virtual_ip,
+                            exit_node_real_ip = %best_exit_node.real_ip,
+                            priority = best_exit_node.priority,
+                            "Routing traffic through best exit node"
+                        );
+                    }
+                }
+            } else {
+                // Fallback to original logic if exit manager not available
+                for exit_node in self.exit_nodes.read().await.iter() {
+                    let IpAddr::V4(exit_node) = exit_node else {
+                        continue;
+                    };
+                    if let Some(peer_id) = self.peers.get_peer_id_by_ipv4(exit_node).await {
+                        dst_peers.push(peer_id);
+                        is_exit_node = true;
+                        break;
+                    }
                 }
             }
         }
@@ -1472,6 +1510,23 @@ impl PeerManager {
     pub async fn update_exit_nodes(&self) {
         let exit_nodes = self.global_ctx.config.get_exit_nodes();
         *self.exit_nodes.write().await = exit_nodes;
+        
+        // Update exit node manager if available
+        if let Some(exit_manager) = self.exit_node_manager.read().await.as_ref() {
+            if let Err(e) = exit_manager.update_exit_nodes(exit_nodes).await {
+                tracing::error!("Failed to update exit node manager: {}", e);
+            }
+        }
+    }
+
+    /// Set exit node manager reference
+    pub async fn set_exit_node_manager(&self, exit_manager: Option<Arc<ExitNodeManager>>) {
+        *self.exit_node_manager.write().await = exit_manager;
+    }
+
+    /// Get exit node manager reference
+    pub async fn get_exit_node_manager(&self) -> Option<Arc<ExitNodeManager>> {
+        self.exit_node_manager.read().await.clone()
     }
 }
 

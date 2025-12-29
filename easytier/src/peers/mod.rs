@@ -13,6 +13,9 @@ pub mod peer_rpc_service;
 pub mod route_trait;
 pub mod rpc_service;
 
+// Exit node management
+pub mod exit_node_manager;
+
 pub mod foreign_network_client;
 pub mod foreign_network_manager;
 

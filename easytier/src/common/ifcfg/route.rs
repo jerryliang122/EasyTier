@@ -1,5 +1,20 @@
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+/// Exit node specific route configuration
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ExitNodeConfig {
+    /// Whether this route is for exit node traffic
+    pub is_exit_node: bool,
+    /// Virtual IP address of the exit node
+    pub virtual_ip: IpAddr,
+    /// Real public IP address of the exit node
+    pub real_ip: IpAddr,
+    /// Route priority for exit node selection (lower = higher priority)
+    pub priority: u32,
+    /// Whether this route should prevent traffic loops
+    pub prevent_loop: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Route {
     /// Network address of the destination. `0.0.0.0` with a prefix of `0` is considered a default route.
@@ -43,6 +58,10 @@ pub struct Route {
     ///
     /// If luid is specified, ifindex is optional.
     pub luid: Option<u64>,
+
+    /// Exit node specific configuration
+    #[cfg(target_os = "linux")]
+    pub exit_node_config: Option<ExitNodeConfig>,
 }
 
 impl Route {
@@ -68,6 +87,8 @@ impl Route {
             metric: None,
             #[cfg(target_os = "windows")]
             luid: None,
+            #[cfg(target_os = "linux")]
+            exit_node_config: None,
         }
     }
 
@@ -116,6 +137,13 @@ impl Route {
     #[cfg(target_os = "windows")]
     pub fn with_luid(mut self, luid: u64) -> Self {
         self.luid = Some(luid);
+        self
+    }
+
+    /// Set exit node configuration
+    #[cfg(target_os = "linux")]
+    pub fn with_exit_node_config(mut self, config: ExitNodeConfig) -> Self {
+        self.exit_node_config = Some(config);
         self
     }
 

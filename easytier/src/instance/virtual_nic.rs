@@ -13,7 +13,12 @@ use crate::{
         global_ctx::{ArcGlobalCtx, GlobalCtxEvent},
         ifcfg::{IfConfiger, IfConfiguerTrait},
     },
-    peers::{peer_manager::PeerManager, recv_packet_from_chan, PacketRecvChanReceiver},
+    peers::{
+        peer_manager::PeerManager, 
+        recv_packet_from_chan, 
+        PacketRecvChanReceiver,
+        exit_node_manager::ExitNodeManager,
+    },
     tunnel::{
         common::{reserve_buf, FramedWriter, TunnelWrapper, ZCPacketToBytes},
         packet_def::{ZCPacket, ZCPacketType, TAIL_RESERVED_SIZE},
@@ -627,6 +632,7 @@ pub struct NicCtx {
 
     nic: Arc<Mutex<VirtualNic>>,
     tasks: JoinSet<()>,
+    exit_node_manager: Option<Arc<ExitNodeManager>>,
 }
 
 impl NicCtx {
@@ -645,6 +651,7 @@ impl NicCtx {
 
             nic: Arc::new(Mutex::new(VirtualNic::new(global_ctx))),
             tasks: JoinSet::new(),
+            exit_node_manager: None,
         }
     }
 
@@ -966,7 +973,56 @@ impl NicCtx {
 
         self.run_proxy_cidrs_route_updater().await?;
 
+        // Initialize exit node manager
+        self.initialize_exit_node_manager().await?;
+
         Ok(())
+    }
+
+    /// Initialize exit node manager and setup default routes
+    async fn initialize_exit_node_manager(&mut self) -> Result<(), Error> {
+        tracing::info!("Initializing exit node manager");
+        
+        let nic = self.nic.lock().await;
+        let ifcfg = Arc::new(IfConfiger {});
+        let tun_interface = nic.ifname().to_string();
+        
+        // Create exit node manager
+        self.exit_node_manager = Some(Arc::new(ExitNodeManager::new(ifcfg, tun_interface)));
+        
+        // Setup default route to TUN device if exit nodes are configured
+        if let Some(exit_nodes) = self.global_ctx.config.get_exit_nodes() {
+            if !exit_nodes.is_empty() {
+                let exit_manager = self.exit_node_manager.as_ref().unwrap();
+                exit_manager.update_exit_nodes(exit_nodes).await
+                    .map_err(|e| Error::Other(e.to_string()))?;
+                
+                // Setup default route to TUN device
+                exit_manager.setup_default_route().await
+                    .map_err(|e| Error::Other(e.to_string()))?;
+                
+                tracing::info!("Exit node manager initialized with {} exit nodes", exit_nodes.len());
+            }
+        }
+        
+        Ok(())
+    }
+
+    /// Get exit node manager reference
+    pub fn get_exit_node_manager(&self) -> Option<Arc<ExitNodeManager>> {
+        self.exit_node_manager.clone()
+    }
+
+    /// Update exit nodes configuration
+    pub async fn update_exit_nodes(&self, exit_nodes: Vec<std::net::IpAddr>) -> Result<(), Error> {
+        if let Some(exit_manager) = &self.exit_node_manager {
+            exit_manager.update_exit_nodes(exit_nodes).await
+                .map_err(|e| Error::Other(e.to_string()))?;
+            Ok(())
+        } else {
+            tracing::warn!("Exit node manager not initialized");
+            Err(Error::Other("Exit node manager not initialized".to_string()))
+        }
     }
 
     #[cfg(any(target_os = "android", target_env = "ohos"))]
@@ -993,6 +1049,21 @@ impl NicCtx {
         self.do_forward_peers_to_nic(sink);
 
         Ok(())
+    }
+}
+
+impl Drop for NicCtx {
+    fn drop(&mut self) {
+        // Clean up exit node routes when NicCtx is dropped
+        if let Some(exit_manager) = &self.exit_node_manager {
+            tracing::info!("Cleaning up exit node routes on NicCtx drop");
+            let exit_manager = exit_manager.clone();
+            tokio::spawn(async move {
+                if let Err(e) = exit_manager.cleanup_routes().await {
+                    tracing::error!("Failed to cleanup exit node routes: {}", e);
+                }
+            });
+        }
     }
 }
 
